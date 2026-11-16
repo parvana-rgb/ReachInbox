@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { -webkit-font-smoothing: antialiased; }
+  body { @apply bg-paper font-sans text-ink; }
+  h1, h2, h3 { @apply font-display tracking-tight; }
+  :focus-visible { outline: 2px solid #1F4FD8; outline-offset: 2px; }
+}
+
+@layer components {
+  .card { @apply rounded-xl border border-ink-100 bg-white shadow-card; }
+  .input { @apply w-full rounded-lg border border-ink-100 bg-white px-3 py-2 text-sm text-ink placeholder:text-ink-300 focus:border-signal focus:outline-none focus:ring-2 focus:ring-signal/20; }
+  .label { @apply mb-1 block text-sm font-medium text-ink-700; }
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-primary { @apply btn bg-signal text-white hover:bg-signal-600; }
+  .btn-secondary { @apply btn border border-ink-100 bg-white text-ink hover:bg-paper; }
+  .btn-danger { @apply btn border border-stamp/30 bg-white text-stamp hover:bg-stamp-50; }
+}
+
+/* the airmail edge: used once, on the sign-in card */
+.airmail {
+  background: repeating-linear-gradient(135deg, #D6402B 0 14px, #fff 14px 22px, #1F4FD8 22px 36px, #fff 36px 44px);
+}
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

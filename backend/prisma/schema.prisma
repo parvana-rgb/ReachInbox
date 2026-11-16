@@ -1,0 +1,138 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EmailStatus {
+  scheduled
+  processing
+  sent
+  failed
+}
+
+model User {
+  id               String            @id @default(uuid()) @db.Uuid
+  googleId         String            @unique
+  email            String            @unique
+  name             String
+  avatarUrl        String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  senders          Sender[]
+  batches          EmailBatch[]
+  emails           Email[]
+  slackIntegration SlackIntegration?
+  rateLimitEvents  RateLimitEvent[]
+}
+
+/// An SMTP identity used to send mail (Ethereal test accounts). Hourly limits are tracked per sender.
+model Sender {
+  id             String           @id @default(uuid()) @db.Uuid
+  userId         String           @db.Uuid
+  email          String
+  name           String
+  smtpHost       String
+  smtpPort       Int
+  smtpSecure     Boolean          @default(false)
+  smtpUser       String
+  smtpPassEnc    String // AES-256-GCM encrypted
+  isActive       Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emails         Email[]
+  rateLimitEvents RateLimitEvent[]
+
+  @@unique([userId, email])
+  @@index([userId, isActive])
+}
+
+/// One "Schedule" action: shared subject/body and scheduling parameters for N emails.
+model EmailBatch {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @db.Uuid
+  subject      String
+  body         String
+  startAt      DateTime
+  delaySeconds Int
+  hourlyLimit  Int
+  totalCount   Int
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emails       Email[]
+
+  @@index([userId, createdAt])
+}
+
+model Email {
+  id           String      @id @default(uuid()) @db.Uuid
+  userId       String      @db.Uuid
+  batchId      String      @db.Uuid
+  senderId     String      @db.Uuid
+  toEmail      String
+  subject      String
+  status       EmailStatus @default(scheduled)
+  /// original requested time
+  scheduledAt  DateTime
+  /// current planned send time (moves forward when rate limited)
+  sendAt       DateTime
+  sentAt       DateTime?
+  lockedAt     DateTime?
+  attempts     Int         @default(0)
+  rescheduleCount Int      @default(0)
+  lastError    String?
+  messageId    String?
+  previewUrl   String?
+  smtpResponse String?
+  /// true when the Elasticsearch copy may be stale
+  indexDirty   Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  batch        EmailBatch  @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  sender       Sender      @relation(fields: [senderId], references: [id])
+
+  @@unique([batchId, toEmail])
+  @@index([userId, status, sendAt])
+  @@index([userId, sentAt])
+  @@index([status, sendAt])
+  @@index([indexDirty])
+  @@index([senderId])
+}
+
+model SlackIntegration {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @unique @db.Uuid
+  teamId      String
+  teamName    String
+  channelId   String
+  channelName String?
+  botTokenEnc String // AES-256-GCM encrypted bot token
+  botUserId   String?
+  connectedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// One row per (sender, hour window) in which the limit was hit. The unique key dedupes Slack alerts.
+model RateLimitEvent {
+  id                 String    @id @default(uuid()) @db.Uuid
+  userId             String    @db.Uuid
+  senderId           String    @db.Uuid
+  windowStart        DateTime
+  limit              Int
+  nextAvailableAt    DateTime
+  notificationStatus String    @default("pending") // pending | sent | skipped_not_connected | failed
+  notificationError  String?
+  notifiedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sender             Sender    @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, windowStart])
+  @@index([userId, createdAt])
+}
